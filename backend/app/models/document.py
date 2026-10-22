@@ -16,3 +16,8 @@ class Document:
     ingested_at: str
     word_count: int
     indexed: bool
+    file_type: str | None = None
+    source_name: str | None = None
+    updated_at: str | None = None
+    content_hash: str | None = None
+    metadata_json: str | None = None

@@ -135,14 +135,30 @@ class Ranker:
 
     def rank(self, query_terms: Iterable[str], candidate_ids: Iterable[int] | None = None) -> RankingResult:
         qvec, unknown = self.model.query_vector(query_terms)
+        return self.rank_vector(qvec, candidate_ids, unknown_terms=unknown)
+
+    def rank_vector(
+        self,
+        qvec: Mapping[str, float],
+        candidate_ids: Iterable[int] | None = None,
+        unknown_terms: list[str] | None = None,
+    ) -> RankingResult:
+        """Rank documents by cosine similarity to an arbitrary query vector.
+
+        Used directly by query expansion and Rocchio, whose query vectors contain terms
+        (and weights) that did not come from the typed query. Only positive weights can
+        make a document a candidate.
+        """
+        qvec = {t: w for t, w in qvec.items() if w != 0.0 and self.model.df(t) > 0}
         if candidate_ids is None:  # every document sharing at least one query term
             cands: set[int] = set()
-            for t in qvec:
-                cands.update(self.model.index.doc_ids(t))
+            for t, w in qvec.items():
+                if w > 0:
+                    cands.update(self.model.index.doc_ids(t))
         else:
             cands = {d for d in candidate_ids if self.model.index.has_document(d)}
         scored = [self.score_document(qvec, d) for d in cands]
         if candidate_ids is None:
             scored = [s for s in scored if s.score > 0]
         scored.sort(key=lambda s: (-round(s.score, SCORE_PRECISION), s.doc_id))
-        return RankingResult(qvec, unknown, scored)
+        return RankingResult(dict(qvec), unknown_terms or [], scored)

@@ -50,8 +50,9 @@ def seed_database(conn: sqlite3.Connection, path: Path = SEED_PATH) -> dict[str,
                 inserted += 1
             elif (row["title"], row["text"], row["category"]) != (d["title"], d["text"], d["category"]):
                 conn.execute(
-                    "UPDATE documents SET title = ?, text = ?, category = ?, word_count = ?, indexed = 0 WHERE id = ?",
-                    (d["title"], d["text"], d["category"], repo.count_words(d["text"]), row["id"]),
+                    "UPDATE documents SET title = ?, text = ?, category = ?, word_count = ?, indexed = 0, updated_at = ?"
+                    " WHERE id = ?",
+                    (d["title"], d["text"], d["category"], repo.count_words(d["text"]), repo.utc_now(), row["id"]),
                 )
                 updated += 1
             else:

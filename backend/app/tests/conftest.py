@@ -59,3 +59,21 @@ def client(api_settings):
             r = c.post("/api/documents", json={"title": title, "text": text, "category": category})
             assert r.status_code == 201, r.text
         yield c
+
+
+@pytest.fixture
+def seeded_client(tmp_path):
+    """TestClient over a temporary DB holding the full seed corpus (ids 1..114) and the evaluation dataset."""
+    from app.database.connection import connect
+    from app.database.evaluation import seed_evaluation
+    from app.database.schema import init_db
+    from app.database.seed import seed_database
+
+    settings = Settings(database_path=tmp_path / "seeded.db")
+    conn = connect(settings.database_path)
+    init_db(conn)
+    seed_database(conn)
+    seed_evaluation(conn)
+    conn.close()
+    with TestClient(create_app(settings)) as c:
+        yield c

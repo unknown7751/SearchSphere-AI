@@ -1,0 +1,15 @@
+{
+  "notice": "Hand-written relevance judgments for the sample corpus in seed_documents.json. A document is judged relevant (1) when its main topic is what the query asks for. Documents are referenced by their stable external_id, so the judgments survive a database rebuild; they are resolved to database IDs when loaded. The corpus has no document about relational database normalisation, so no such query is included.",
+  "queries": [
+    {"query": "machine learning", "description": "Core machine-learning methods", "relevant": ["seed-030", "seed-031", "seed-032", "seed-039", "seed-040", "seed-041", "seed-044"]},
+    {"query": "neural networks", "description": "Neural network architectures and training", "relevant": ["seed-033", "seed-034", "seed-035", "seed-036", "seed-037"]},
+    {"query": "operating systems", "description": "OS processes, memory and synchronisation", "relevant": ["seed-020", "seed-021", "seed-028"]},
+    {"query": "computer networks", "description": "Network protocols, filtering and delivery", "relevant": ["seed-023", "seed-024", "seed-067", "seed-069", "seed-076"]},
+    {"query": "sorting algorithms", "description": "Sorting and algorithm analysis", "relevant": ["seed-016", "seed-019"]},
+    {"query": "database indexing", "description": "Index structures for lookup", "relevant": ["seed-026", "seed-027", "seed-113"]},
+    {"query": "natural language processing", "description": "Language and text modelling", "relevant": ["seed-037", "seed-042", "seed-043"]},
+    {"query": "encryption", "description": "Cryptography and secure channels", "relevant": ["seed-073", "seed-074", "seed-075", "seed-085"]},
+    {"query": "information retrieval", "description": "Search-engine concepts", "relevant": ["seed-107", "seed-108", "seed-109", "seed-110", "seed-111", "seed-112", "seed-113"]},
+    {"query": "cyber attacks", "description": "Common attack types", "relevant": ["seed-077", "seed-078", "seed-079", "seed-082", "seed-087"]}
+  ]
+}

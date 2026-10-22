@@ -2,12 +2,21 @@
 import sqlite3
 import time
 from collections import Counter
+from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 
+from app.api.advanced_helpers import expansion_workbench, rocchio_workbench, run_rocchio
 from app.api.deps import get_conn, get_engine
+from app.api.evaluation import evaluation_workbench
 from app.core.errors import AppError
 from app.database import repository as repo
+from app.schemas.advanced import (
+    EvaluationRunRequest,
+    QueryExpansionRequest,
+    RelevanceFeedbackRequest,
+    RocchioRequest,
+)
 from app.schemas.workbench import (
     CosineRequest,
     CosineResponse,
@@ -199,5 +208,70 @@ def cosine(body: CosineRequest, engine: SearchEngine = Depends(get_engine), conn
             "formula": "cosine(q,d) = dot(q,d) / (||q|| * ||d||)",
             "documents": out,
         }
+    response["took_ms"] = round((time.perf_counter() - start) * 1000, 3)
+    return response
+
+
+# ------------------------------------------------------------------ Phase 2: advanced IR + evaluation
+@router.post("/query-expansion", response_model=dict[str, Any])
+def query_expansion(
+    body: QueryExpansionRequest, engine: SearchEngine = Depends(get_engine), conn: sqlite3.Connection = Depends(get_conn)
+):
+    """Original query -> expanded terms -> final expanded query, with the ranking before and after."""
+    start = time.perf_counter()
+    with engine.lock:
+        search = engine.advanced.expanded_search(
+            body.query,
+            feedback_docs=body.feedback_docs,
+            max_terms=body.max_expansion_terms,
+            expansion_weight=body.expansion_weight,
+        )
+        response = expansion_workbench(engine, conn, body.query, search, body.top_k)
+    response["took_ms"] = round((time.perf_counter() - start) * 1000, 3)
+    return response
+
+
+@router.post("/rocchio", response_model=dict[str, Any])
+def rocchio(body: RocchioRequest, engine: SearchEngine = Depends(get_engine), conn: sqlite3.Connection = Depends(get_conn)):
+    """Rocchio step by step: vectors, per-term arithmetic, cosine similarity and the new ranking."""
+    start = time.perf_counter()
+    with engine.lock:
+        search = run_rocchio(engine, body.query, body)
+        response = rocchio_workbench(engine, conn, body.query, search, body.top_k, body.vector_terms)
+    response["took_ms"] = round((time.perf_counter() - start) * 1000, 3)
+    return response
+
+
+@router.post("/relevance-feedback", response_model=dict[str, Any])
+def relevance_feedback(
+    body: RelevanceFeedbackRequest, engine: SearchEngine = Depends(get_engine), conn: sqlite3.Connection = Depends(get_conn)
+):
+    """User-judged relevance feedback: vector breakdown plus how the judgments re-ranked the results."""
+    if not body.relevant_doc_ids and not body.non_relevant_doc_ids and not body.pseudo_feedback_docs:
+        raise AppError(
+            400, "no_feedback_documents", "Provide relevant_doc_ids, non_relevant_doc_ids or pseudo_feedback_docs."
+        )
+    start = time.perf_counter()
+    with engine.lock:
+        search = run_rocchio(engine, body.query, body)
+        full = rocchio_workbench(engine, conn, body.query, search, body.top_k, body.vector_terms)
+    keep = (
+        "input", "parameters", "preprocessing", "feedback_documents", "original_query_vector", "relevant_contribution",
+        "non_relevant_contribution", "updated_query_vector", "term_calculations", "top_positive_terms",
+        "top_negative_terms", "updated_query_terms", "ranking_before",
+    )
+    response = {k: full[k] for k in keep}
+    response["ranking_after"] = full["ranking"]
+    response["took_ms"] = round((time.perf_counter() - start) * 1000, 3)
+    return response
+
+
+@router.post("/evaluation", response_model=dict[str, Any])
+def evaluation(
+    body: EvaluationRunRequest, engine: SearchEngine = Depends(get_engine), conn: sqlite3.Connection = Depends(get_conn)
+):
+    """Evaluation with every intermediate count, per-rank precision/recall and the AP arithmetic."""
+    start = time.perf_counter()
+    response = evaluation_workbench(engine, conn, body)
     response["took_ms"] = round((time.perf_counter() - start) * 1000, 3)
     return response

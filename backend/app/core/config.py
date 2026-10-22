@@ -14,7 +14,7 @@ def _env_list(name: str, default: str) -> list[str]:
 @dataclass(frozen=True)
 class Settings:
     app_name: str = "SearchSphere AI"
-    version: str = "0.1.0"
+    version: str = "0.2.0"
     database_path: Path = field(
         default_factory=lambda: Path(os.getenv("SEARCHSPHERE_DB_PATH", str(DATA_DIR / "searchsphere.db")))
     )
@@ -27,6 +27,9 @@ class Settings:
         )
     )
     wildcard_expansion_limit: int = int(os.getenv("SEARCHSPHERE_WILDCARD_LIMIT", "50"))
+    # Upload limits (documented in README): 5 MB per file, 200,000 characters of extracted text.
+    max_upload_bytes: int = int(os.getenv("SEARCHSPHERE_MAX_UPLOAD_BYTES", str(5 * 1024 * 1024)))
+    max_document_chars: int = int(os.getenv("SEARCHSPHERE_MAX_DOCUMENT_CHARS", "200000"))
 
 
 settings = Settings()

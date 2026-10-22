@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import APIRouter, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import documents, health, index_admin, search, workbench
+from app.api import documents, evaluation, health, index_admin, search, workbench
 from app.core.config import Settings, settings as default_settings
 from app.core.errors import register_error_handlers
 from app.database.connection import connect
@@ -30,7 +30,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app = FastAPI(
         title=settings.app_name,
         version=settings.version,
-        description="Information-retrieval backend: Boolean, tolerant (prefix/wildcard) and TF-IDF/cosine search.",
+        description=(
+            "Information-retrieval backend: Boolean, tolerant (prefix/wildcard) and TF-IDF/cosine search, "
+            "query expansion, Rocchio relevance feedback, evaluation metrics and document ingestion."
+        ),
         lifespan=lifespan,
     )
     app.state.settings = settings
@@ -43,7 +46,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     register_error_handlers(app)
 
     api = APIRouter(prefix="/api")
-    for module in (health, documents, search, workbench, index_admin):
+    for module in (health, documents, search, workbench, evaluation, index_admin):
         api.include_router(module.router)
     app.include_router(api)
     return app

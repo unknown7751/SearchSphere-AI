@@ -41,6 +41,10 @@ class DocumentSummary(BaseModel):
     word_count: int
     indexed: bool
     snippet: str
+    file_type: str | None = None
+    source_name: str | None = None
+    updated_at: str | None = None
+    metadata: dict | None = None
 
 
 class DocumentDetail(DocumentSummary):

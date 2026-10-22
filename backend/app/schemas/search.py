@@ -27,11 +27,25 @@ class QueryAnalysis(BaseModel):
     unknown_terms: list[str]
 
 
+class MatchingTerm(BaseModel):
+    """One query term found in a result document, with the quantities behind its score."""
+
+    term: str
+    word: str  # readable form of the index term
+    tf: int
+    df: int
+    idf: float
+    tfidf: float  # tf * idf: the term's weight in the document vector
+    query_weight: float
+    contribution: float  # query_weight * tfidf: the term's share of the dot product
+
+
 class ScoreExplanation(BaseModel):
     dot_product: float
     query_norm: float
     document_norm: float
     term_contributions: dict[str, float]
+    matching_terms: list[MatchingTerm] = []
 
 
 class SearchResultItem(BaseModel):

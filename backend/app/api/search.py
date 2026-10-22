@@ -6,6 +6,13 @@ from fastapi import APIRouter, Depends, Query
 from app.api.deps import get_conn, get_engine, make_snippet
 from app.core.errors import AppError
 from app.database import repository as repo
+from app.api.advanced_helpers import expansion_summary, rocchio_summary, run_rocchio
+from app.schemas.advanced import (
+    ExpandedSearchRequest,
+    ExpandedSearchResponse,
+    RocchioSearchRequest,
+    RocchioSearchResponse,
+)
 from app.schemas.search import (
     BooleanSearchRequest,
     BooleanSearchResponse,
@@ -26,6 +33,87 @@ def _ms(start: float) -> float:
     return round((time.perf_counter() - start) * 1000, 3)
 
 
+def _explanation(engine: SearchEngine, ranking, scored) -> dict:
+    """Score breakdown for one result: dot product, norms and the per-term TF-IDF evidence."""
+    model = engine.model
+    dvec = model.document_vector(scored.doc_id)
+    matching = [
+        {
+            "term": t,
+            "word": engine.index.display_form(t),
+            "tf": model.tf(t, scored.doc_id),
+            "df": model.df(t),
+            "idf": model.idf(t),
+            "tfidf": dvec[t],
+            "query_weight": ranking.query_vector[t],
+            "contribution": scored.term_contributions[t],
+        }
+        for t in sorted(scored.term_contributions, key=lambda t: (-scored.term_contributions[t], t))
+    ]
+    return {
+        "dot_product": scored.dot,
+        "query_norm": scored.query_norm,
+        "document_norm": scored.doc_norm,
+        "term_contributions": scored.term_contributions,
+        "matching_terms": matching,
+    }
+
+
+def render_ranked_search(engine: SearchEngine, conn: sqlite3.Connection, body: SearchRequest, analysis, ranking) -> dict:
+    """Filter, paginate and describe a ranking (shared by TF-IDF, expanded and Rocchio search).
+
+    Must be called while holding ``engine.lock``. ``took_ms`` is added by the caller.
+    """
+    terms = analysis.index_terms
+    ranked = ranking.ranked if ranking else []
+    if body.category and ranked:
+        docs = repo.get_documents(conn, [s.doc_id for s in ranked])
+        ranked = [s for s in ranked if docs[s.doc_id].category == body.category]
+    total = len(ranked)
+    offset = (body.page - 1) * body.page_size
+    page_items = ranked[offset : offset + body.page_size]
+    docs = repo.get_documents(conn, [s.doc_id for s in page_items])
+
+    results = []
+    for i, s in enumerate(page_items, start=offset + 1):
+        doc = docs[s.doc_id]
+        item = {
+            "rank": i,
+            "doc_id": doc.id,
+            "title": doc.title,
+            "category": doc.category,
+            "snippet": make_snippet(doc.text),
+            "score": s.score,
+        }
+        if body.explain:
+            item["explanation"] = _explanation(engine, ranking, s)
+        results.append(item)
+
+    unknown = ranking.unknown_terms if ranking else []
+    if not terms and not ranked:
+        message = "The query contains only stop words or punctuation, so there is nothing to search for."
+    elif not ranked:
+        message = "None of the query terms appear in the indexed documents." if len(unknown) == len(set(terms))             else "No documents match the query."
+    else:
+        message = None
+    return {
+        "query": {
+            "original": body.query,
+            "normalized": analysis.normalized,
+            "tokens": analysis.tokens,
+            "stop_words_removed": analysis.stop_words_removed,
+            "index_terms": terms,
+            "unknown_terms": unknown,
+        },
+        "query_vector": ranking.query_vector if ranking else {},
+        "results": results,
+        "total_results": total,
+        "page": body.page,
+        "page_size": body.page_size,
+        "message": message,
+    }
+
+
 @router.post("", response_model=SearchResponse)
 def ranked_search(
     body: SearchRequest,
@@ -38,60 +126,46 @@ def ranked_search(
         analysis = engine.preprocessor.analyze(body.query)
         terms = analysis.index_terms
         ranking = engine.ranker.rank(terms) if terms else None
+        response = render_ranked_search(engine, conn, body, analysis, ranking)
+    response["took_ms"] = _ms(start)
+    return response
 
-        ranked = ranking.ranked if ranking else []
-        if body.category and ranked:
-            docs = repo.get_documents(conn, [s.doc_id for s in ranked])
-            ranked = [s for s in ranked if docs[s.doc_id].category == body.category]
-        total = len(ranked)
-        offset = (body.page - 1) * body.page_size
-        page_items = ranked[offset : offset + body.page_size]
-        docs = repo.get_documents(conn, [s.doc_id for s in page_items])
 
-        results = []
-        for i, s in enumerate(page_items, start=offset + 1):
-            doc = docs[s.doc_id]
-            item = {
-                "rank": i,
-                "doc_id": doc.id,
-                "title": doc.title,
-                "category": doc.category,
-                "snippet": make_snippet(doc.text),
-                "score": s.score,
-            }
-            if body.explain:
-                item["explanation"] = {
-                    "dot_product": s.dot,
-                    "query_norm": s.query_norm,
-                    "document_norm": s.doc_norm,
-                    "term_contributions": s.term_contributions,
-                }
-            results.append(item)
+@router.post("/expanded", response_model=ExpandedSearchResponse)
+def expanded_search(
+    body: ExpandedSearchRequest,
+    engine: SearchEngine = Depends(get_engine),
+    conn: sqlite3.Connection = Depends(get_conn),
+):
+    """TF-IDF search with corpus-driven query expansion (the expanded vector is what is ranked)."""
+    start = time.perf_counter()
+    with engine.lock:
+        analysis = engine.preprocessor.analyze(body.query)
+        search = engine.advanced.expanded_search(
+            body.query,
+            feedback_docs=body.feedback_docs,
+            max_terms=body.max_expansion_terms,
+            expansion_weight=body.expansion_weight,
+        )
+        response = render_ranked_search(engine, conn, body, analysis, search.ranking if analysis.index_terms else None)
+        response["expansion"] = expansion_summary(body.query, search.expansion)
+    response["took_ms"] = _ms(start)
+    return response
 
-        unknown = ranking.unknown_terms if ranking else []
-        if not terms:
-            message = "The query contains only stop words or punctuation, so there is nothing to search for."
-        elif not ranked:
-            message = "None of the query terms appear in the indexed documents." if len(unknown) == len(set(terms)) \
-                else "No documents match the query."
-        else:
-            message = None
-        response = {
-            "query": {
-                "original": body.query,
-                "normalized": analysis.normalized,
-                "tokens": analysis.tokens,
-                "stop_words_removed": analysis.stop_words_removed,
-                "index_terms": terms,
-                "unknown_terms": unknown,
-            },
-            "query_vector": ranking.query_vector if ranking else {},
-            "results": results,
-            "total_results": total,
-            "page": body.page,
-            "page_size": body.page_size,
-            "message": message,
-        }
+
+@router.post("/rocchio", response_model=RocchioSearchResponse)
+def rocchio_search(
+    body: RocchioSearchRequest,
+    engine: SearchEngine = Depends(get_engine),
+    conn: sqlite3.Connection = Depends(get_conn),
+):
+    """Ranked retrieval with a Rocchio-modified query vector built from relevance feedback."""
+    start = time.perf_counter()
+    with engine.lock:
+        analysis = engine.preprocessor.analyze(body.query)
+        search = run_rocchio(engine, body.query, body)
+        response = render_ranked_search(engine, conn, body, analysis, search.ranking)
+        response["rocchio"] = rocchio_summary(engine, body.query, search)
     response["took_ms"] = _ms(start)
     return response
 

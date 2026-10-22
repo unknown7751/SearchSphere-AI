@@ -5,3 +5,5 @@ numpy>=1.26
 nltk>=3.8.1
 pytest>=8.0
 httpx>=0.26
+python-multipart>=0.0.9
+pymupdf>=1.24

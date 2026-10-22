@@ -50,6 +50,7 @@ class InvertedIndex:
         self._sorted_surface: list[str] | None = None
         self._doc_id_cache: dict[str, list[int]] = {}
         self._all_ids_cache: list[int] | None = None
+        self._display_forms: dict[str, str] | None = None
         self.version += 1
 
     # ------------------------------------------------------------------ updates
@@ -100,6 +101,7 @@ class InvertedIndex:
         self._sorted_vocab = None
         self._sorted_surface = None
         self._all_ids_cache = None
+        self._display_forms = None
         self.version += 1
 
     # ------------------------------------------------------------------ lookups
@@ -156,6 +158,23 @@ class InvertedIndex:
 
     def surface_term(self, surface: str) -> str | None:
         return self._surface_term.get(surface)
+
+    def display_form(self, term: str) -> str:
+        """A readable word for an index term (e.g. stem ``learn`` -> ``learning``).
+
+        The surface form found in the most documents wins; ties go to the shorter, then
+        alphabetically first form. Re-analysing the returned word yields ``term`` again.
+        Falls back to the term itself when no surface form is known.
+        """
+        if self._display_forms is None:
+            best: dict[str, tuple[int, int, str]] = {}
+            for surface, docs in self._surface.items():
+                key = (-len(docs), len(surface), surface)
+                term_ = self._surface_term[surface]
+                if term_ not in best or key < best[term_]:
+                    best[term_] = key
+            self._display_forms = {t: key[2] for t, key in best.items()}
+        return self._display_forms.get(term, term)
 
     # ------------------------------------------------------------------ inspection
     def inspect(self, term: str) -> dict:

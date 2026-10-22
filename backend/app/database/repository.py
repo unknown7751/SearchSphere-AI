@@ -9,7 +9,10 @@ from typing import Iterator, Sequence
 from app.models.document import Document
 
 _WORD = re.compile(r"\w+", re.UNICODE)
-_COLUMNS = "id, external_id, title, text, category, source_type, source_url, published_at, ingested_at, word_count, indexed"
+_COLUMNS = (
+    "id, external_id, title, text, category, source_type, source_url, published_at, ingested_at, word_count, indexed,"
+    " file_type, source_name, updated_at, content_hash, metadata_json"
+)
 
 
 def utc_now() -> str:
@@ -36,12 +39,19 @@ def insert_document(
     source_url: str | None = None,
     published_at: str | None = None,
     external_id: str | None = None,
+    file_type: str | None = None,
+    source_name: str | None = None,
+    content_hash: str | None = None,
+    metadata_json: str | None = None,
 ) -> int:
     """Insert a document (not yet indexed) and return its ID. Does not commit."""
+    now = utc_now()
     cur = conn.execute(
         "INSERT INTO documents (external_id, title, text, category, source_type, source_url, published_at,"
-        " ingested_at, word_count, indexed) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)",
-        (external_id, title, text, category, source_type, source_url, published_at, utc_now(), count_words(text)),
+        " ingested_at, word_count, indexed, file_type, source_name, updated_at, content_hash, metadata_json)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)",
+        (external_id, title, text, category, source_type, source_url, published_at, now, count_words(text),
+         file_type, source_name, now, content_hash, metadata_json),
     )
     return int(cur.lastrowid)
 
@@ -90,6 +100,11 @@ def list_documents(
 def iter_all_documents(conn: sqlite3.Connection) -> Iterator[Document]:
     for row in conn.execute(f"SELECT {_COLUMNS} FROM documents ORDER BY id"):
         yield _to_doc(row)
+
+
+def find_by_content_hash(conn: sqlite3.Connection, content_hash: str) -> Document | None:
+    row = conn.execute(f"SELECT {_COLUMNS} FROM documents WHERE content_hash = ?", (content_hash,)).fetchone()
+    return _to_doc(row) if row else None
 
 
 def delete_document(conn: sqlite3.Connection, doc_id: int) -> bool:

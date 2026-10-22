@@ -6,16 +6,27 @@ A re-entrant lock serialises index mutation against concurrent request threads.
 """
 from __future__ import annotations
 
+import json
 import sqlite3
 import threading
 
 from app.database import repository as repo
 from app.models.document import Document
+from app.services.advanced_retrieval import AdvancedRetriever
 from app.services.boolean_retrieval import BooleanRetriever
+from app.services.ingestion import ExtractedDocument
 from app.services.inverted_index import InvertedIndex
 from app.services.preprocessing import Preprocessor
 from app.services.ranking import Ranker, TfidfModel
 from app.services.tolerant_retrieval import TolerantRetriever
+
+
+class DuplicateContentError(Exception):
+    """An uploaded document has the same normalised text as an existing document."""
+
+    def __init__(self, existing_id: int):
+        super().__init__(f"Identical content already stored as document {existing_id}")
+        self.existing_id = existing_id
 
 
 class SearchEngine:
@@ -26,6 +37,7 @@ class SearchEngine:
         self.ranker = Ranker(self.model)
         self.boolean = BooleanRetriever(self.index, self.preprocessor.index_terms)
         self.tolerant = TolerantRetriever(self.index, wildcard_limit)
+        self.advanced = AdvancedRetriever(self.model, self.ranker, self.preprocessor, self.boolean)
         self.lock = threading.RLock()
 
     # ------------------------------------------------------------------ indexing
@@ -64,6 +76,30 @@ class SearchEngine:
                     self.index.remove_document(doc_id)
                 raise
             return repo.get_document(conn, doc_id)
+
+    def ingest(self, conn: sqlite3.Connection, extracted: ExtractedDocument, category: str) -> tuple[Document, int]:
+        """Store an extracted upload and make it searchable immediately.
+
+        Same atomic path as :meth:`add_document` (insert row -> preprocess -> update the
+        inverted index / TF / DF -> flag indexed), so no restart or rebuild is needed.
+        Returns the stored document and its token count (index terms after preprocessing).
+        """
+        with self.lock:
+            existing = repo.find_by_content_hash(conn, extracted.content_hash)
+            if existing is not None:
+                raise DuplicateContentError(existing.id)
+            doc = self.add_document(
+                conn,
+                title=extracted.title,
+                text=extracted.text,
+                category=category,
+                source_type="user",
+                file_type=extracted.file_type,
+                source_name=extracted.source_name,
+                content_hash=extracted.content_hash,
+                metadata_json=json.dumps(extracted.metadata, sort_keys=True) if extracted.metadata else None,
+            )
+            return doc, self.index.doc_length(doc.id)
 
     def delete_document(self, conn: sqlite3.Connection, doc_id: int) -> bool:
         with self.lock:
