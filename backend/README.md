@@ -1,7 +1,8 @@
-# SearchSphere AI – backend (Phase 1: core IR engine, Phase 2: advanced IR + evaluation + ingestion)
+# SearchSphere AI – backend (Phase 1: core IR engine, Phase 2: advanced IR + evaluation + ingestion, Phase 3: secure web crawler)
 
-FastAPI + SQLite + NLTK + NumPy (+ PyMuPDF for PDF upload). No API keys, cloud services, GPUs or Docker.
+FastAPI + SQLite + NLTK + NumPy (+ PyMuPDF for PDF upload, Requests + BeautifulSoup for the crawler). No API keys, cloud services, GPUs or Docker.
 Phase 2 algorithms (query expansion, Rocchio, evaluation metrics, ingestion) are documented in [PHASE2.md](PHASE2.md).
+The web crawler (architecture, security model, limits, limitations) is documented in [PHASE3.md](PHASE3.md).
 
 ## Setup (Windows PowerShell, from `backend/`)
 
@@ -33,4 +34,4 @@ locally**; they are not excerpts of real papers and contain no real citations.
 ## Configuration
 
 Optional environment variables are listed in `.env.example` (database path, NLTK data
-directory, CORS origins, wildcard expansion limit, upload size and text-length limits). Nothing secret is required.
+directory, CORS origins, wildcard expansion limit, upload size and text-length limits, crawler user agent / delay / size / duration limits). Nothing secret is required.

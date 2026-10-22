@@ -40,6 +40,54 @@ CREATE TABLE IF NOT EXISTS relevance_judgments (
     PRIMARY KEY (query_id, document_id)
 );
 CREATE INDEX IF NOT EXISTS ix_judgments_document ON relevance_judgments(document_id);
+
+-- Phase 3: web crawler. Crawled pages are ordinary rows of ``documents`` (source_type='crawled');
+-- these tables only hold the job bookkeeping and the per-URL outcome.
+CREATE TABLE IF NOT EXISTS crawl_jobs (
+    id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+    seed_url           TEXT NOT NULL,
+    status             TEXT NOT NULL DEFAULT 'queued'
+                       CHECK (status IN ('queued', 'running', 'completed', 'failed', 'cancelled')),
+    max_pages          INTEGER NOT NULL CHECK (max_pages > 0),
+    max_depth          INTEGER NOT NULL CHECK (max_depth >= 0),
+    timeout_seconds    REAL NOT NULL CHECK (timeout_seconds > 0),
+    include_subdomains INTEGER NOT NULL DEFAULT 0 CHECK (include_subdomains IN (0, 1)),
+    category           TEXT NOT NULL,
+    pages_discovered   INTEGER NOT NULL DEFAULT 0,
+    pages_crawled      INTEGER NOT NULL DEFAULT 0,   -- fetched and stored / refreshed / recognised as duplicate
+    pages_failed       INTEGER NOT NULL DEFAULT 0,
+    pages_blocked      INTEGER NOT NULL DEFAULT 0,   -- blocked by robots.txt or by the security policy
+    pages_skipped      INTEGER NOT NULL DEFAULT 0,   -- unsupported content, noindex, out-of-scope redirect ...
+    cancel_requested   INTEGER NOT NULL DEFAULT 0 CHECK (cancel_requested IN (0, 1)),
+    stop_reason        TEXT,
+    error              TEXT,
+    created_at         TEXT NOT NULL,
+    started_at         TEXT,
+    completed_at       TEXT
+);
+CREATE INDEX IF NOT EXISTS ix_crawl_jobs_status ON crawl_jobs(status);
+
+CREATE TABLE IF NOT EXISTS crawl_results (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id         INTEGER NOT NULL REFERENCES crawl_jobs(id) ON DELETE CASCADE,
+    url            TEXT NOT NULL,                    -- normalised URL that was queued
+    final_url      TEXT,                             -- after redirects
+    title          TEXT,
+    status         TEXT NOT NULL,                    -- indexed|updated|unchanged|duplicate_content|blocked_by_robots|
+                                                     -- blocked_by_security|skipped|failed
+    access         TEXT NOT NULL,                    -- allowed|blocked_by_robots|blocked_by_security|failed
+    depth          INTEGER NOT NULL,
+    http_status    INTEGER,
+    content_type   TEXT,
+    content_length INTEGER,                          -- bytes downloaded
+    document_id    INTEGER REFERENCES documents(id) ON DELETE SET NULL,
+    indexed        INTEGER NOT NULL DEFAULT 0 CHECK (indexed IN (0, 1)),
+    error          TEXT,
+    crawled_at     TEXT NOT NULL,
+    UNIQUE (job_id, url)
+);
+CREATE INDEX IF NOT EXISTS ix_crawl_results_job      ON crawl_results(job_id, id);
+CREATE INDEX IF NOT EXISTS ix_crawl_results_document ON crawl_results(document_id);
 """
 
 # Phase 2 metadata columns for ingested files (added with ALTER TABLE on pre-existing databases).

@@ -84,6 +84,8 @@ def render_ranked_search(engine: SearchEngine, conn: sqlite3.Connection, body: S
             "category": doc.category,
             "snippet": make_snippet(doc.text),
             "score": s.score,
+            "source_type": doc.source_type,
+            "source_url": doc.source_url,
         }
         if body.explain:
             item["explanation"] = _explanation(engine, ranking, s)
@@ -192,7 +194,7 @@ def boolean_search(
         "index_terms": result.index_terms,
         "unknown_terms": result.unknown_terms,
         "matching_doc_ids": result.doc_ids,
-        "results": [{"doc_id": d, "title": docs[d].title, "category": docs[d].category} for d in page_ids],
+        "results": [{"doc_id": d, "title": docs[d].title, "category": docs[d].category, "source_type": docs[d].source_type, "source_url": docs[d].source_url} for d in page_ids],
         "total_results": len(result.doc_ids),
         "page": body.page,
         "page_size": body.page_size,
@@ -236,7 +238,7 @@ def tolerant_search(
             {"term": m.term, "index_term": m.index_term, "document_count": len(m.doc_ids), "doc_ids": m.doc_ids}
             for m in result.matched_terms
         ],
-        "documents": [{"doc_id": d, "title": docs[d].title, "category": docs[d].category} for d in shown_ids],
+        "documents": [{"doc_id": d, "title": docs[d].title, "category": docs[d].category, "source_type": docs[d].source_type, "source_url": docs[d].source_url} for d in shown_ids],
         "total_documents": len(result.doc_ids),
         "took_ms": _ms(start),
         "message": message,

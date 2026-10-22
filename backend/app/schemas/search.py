@@ -55,6 +55,8 @@ class SearchResultItem(BaseModel):
     category: str
     snippet: str
     score: float
+    source_type: str = "user"  # 'seed' | 'user' | 'crawled'
+    source_url: str | None = None  # set for crawled documents (and user documents that declare one)
     explanation: ScoreExplanation | None = None
 
 
@@ -88,6 +90,8 @@ class BooleanDocument(BaseModel):
     doc_id: int
     title: str
     category: str
+    source_type: str = "user"
+    source_url: str | None = None
 
 
 class BooleanSearchResponse(BaseModel):

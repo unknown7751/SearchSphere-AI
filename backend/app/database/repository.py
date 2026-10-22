@@ -107,6 +107,27 @@ def find_by_content_hash(conn: sqlite3.Connection, content_hash: str) -> Documen
     return _to_doc(row) if row else None
 
 
+def find_by_source_url(conn: sqlite3.Connection, source_url: str) -> Document | None:
+    row = conn.execute(f"SELECT {_COLUMNS} FROM documents WHERE source_url = ?", (source_url,)).fetchone()
+    return _to_doc(row) if row else None
+
+
+def update_document_content(
+    conn: sqlite3.Connection, doc_id: int, *, title: str, text: str, content_hash: str | None, metadata_json: str | None
+) -> None:
+    """Replace a document's content (re-crawl of a changed page). Does not commit."""
+    conn.execute(
+        "UPDATE documents SET title = ?, text = ?, word_count = ?, content_hash = ?, metadata_json = ?, updated_at = ?"
+        " WHERE id = ?",
+        (title, text, count_words(text), content_hash, metadata_json, utc_now(), doc_id),
+    )
+
+
+def update_document_metadata(conn: sqlite3.Connection, doc_id: int, metadata_json: str | None) -> None:
+    """Refresh a document's metadata only. Does not commit."""
+    conn.execute("UPDATE documents SET metadata_json = ?, updated_at = ? WHERE id = ?", (metadata_json, utc_now(), doc_id))
+
+
 def delete_document(conn: sqlite3.Connection, doc_id: int) -> bool:
     return conn.execute("DELETE FROM documents WHERE id = ?", (doc_id,)).rowcount > 0
 

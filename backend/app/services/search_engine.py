@@ -29,6 +29,14 @@ class DuplicateContentError(Exception):
         self.existing_id = existing_id
 
 
+class SourceUrlConflict(Exception):
+    """A crawled URL is already stored as a document that was not created by the crawler."""
+
+    def __init__(self, existing_id: int):
+        super().__init__(f"URL already stored as non-crawled document {existing_id}")
+        self.existing_id = existing_id
+
+
 class SearchEngine:
     def __init__(self, preprocessor: Preprocessor | None = None, wildcard_limit: int = 50):
         self.preprocessor = preprocessor or Preprocessor()
@@ -100,6 +108,61 @@ class SearchEngine:
                 metadata_json=json.dumps(extracted.metadata, sort_keys=True) if extracted.metadata else None,
             )
             return doc, self.index.doc_length(doc.id)
+
+    def store_crawled(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        url: str,
+        title: str,
+        text: str,
+        category: str,
+        content_hash: str,
+        metadata: dict,
+    ) -> tuple[Document, str]:
+        """Store (or refresh) a crawled page and keep the index consistent.  The page URL is its identity.
+
+        Returns ``(document, outcome)`` where outcome is ``created`` (new row, indexed), ``updated``
+        (same URL, content changed: row rewritten and re-indexed) or ``unchanged`` (same URL and
+        content: only the crawl metadata is refreshed, nothing is re-indexed).  Raises
+        :class:`DuplicateContentError` when a *different* document already has identical text and
+        :class:`SourceUrlConflict` when the URL belongs to a user/seed document.
+        """
+        metadata_json = json.dumps(metadata, sort_keys=True)
+        with self.lock:
+            existing = repo.find_by_source_url(conn, url)
+            if existing is None:
+                twin = repo.find_by_content_hash(conn, content_hash)
+                if twin is not None:
+                    raise DuplicateContentError(twin.id)
+                doc = self.add_document(
+                    conn, title=title, text=text, category=category, source_type="crawled", source_url=url,
+                    file_type="html", source_name=metadata.get("host"), content_hash=content_hash,
+                    metadata_json=metadata_json,
+                )
+                return doc, "created"
+            if existing.source_type != "crawled":
+                raise SourceUrlConflict(existing.id)
+            if existing.content_hash == content_hash:
+                repo.update_document_metadata(conn, existing.id, metadata_json)
+                conn.commit()
+                return repo.get_document(conn, existing.id), "unchanged"
+            twin = repo.find_by_content_hash(conn, content_hash)
+            if twin is not None and twin.id != existing.id:
+                raise DuplicateContentError(twin.id)
+            try:
+                repo.update_document_content(
+                    conn, existing.id, title=title, text=text, content_hash=content_hash, metadata_json=metadata_json
+                )
+                self.index.remove_document(existing.id)
+                self._index_document(existing.id, f"{title}. {text}")
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                self.index.remove_document(existing.id)  # restore the previous index entry from the old text
+                self._index_document(existing.id, f"{existing.title}. {existing.text}")
+                raise
+            return repo.get_document(conn, existing.id), "updated"
 
     def delete_document(self, conn: sqlite3.Connection, doc_id: int) -> bool:
         with self.lock:
