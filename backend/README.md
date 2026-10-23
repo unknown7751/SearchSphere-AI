@@ -16,6 +16,8 @@ python -m venv .venv
 
 Interactive API docs: <http://localhost:8000/docs>
 
+The Next.js frontend (Phase 4) lives in `../frontend`; see [../frontend/README.md](../frontend/README.md). It needs this API running on port 8000.
+
 ## Maintenance commands
 
 | Command | Purpose |
