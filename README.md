@@ -16,9 +16,68 @@ Browser (Next.js, :3000)  ──HTTP/JSON──▶  FastAPI (:8000)  ──▶  
 The frontend contains **no IR logic**: TF-IDF, cosine similarity, Rocchio, query expansion and every evaluation metric are
 computed only by the backend; the browser collects input and visualises what the API returns.
 
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph FE["Frontend: Next.js :3000 (no IR logic)"]
+        UI["Pages<br/>search · documents · workbench<br/>analytics · crawler · ingest · docs"]
+        HOOKS["hooks/ (useSearch, useCrawler, ...)"]
+        API_JS["lib/api.js<br/>(only module that calls the network)"]
+        UI --> HOOKS --> API_JS
+    end
+
+    subgraph BE["Backend: FastAPI :8000 (all IR logic)"]
+        ROUTERS["api/ routers<br/>health · documents · search · workbench<br/>evaluation · index_admin · crawler"]
+
+        subgraph SVC["services/"]
+            ENGINE["SearchEngine<br/>(owns the index, keeps it in sync)"]
+            PRE["Preprocessor<br/>tokenise · stop-words · stem"]
+            INDEX[("InvertedIndex<br/>in memory")]
+            RETR["Retrieval<br/>Boolean · prefix/wildcard<br/>TF-IDF + cosine ranking"]
+            ADV["Advanced retrieval<br/>query expansion · Rocchio feedback"]
+            EVAL["Evaluation<br/>precision · recall · AP · MAP"]
+            ING["Ingestion<br/>TXT / PDF / HTML extraction"]
+            subgraph CRAWL["Safe crawler"]
+                CM["CrawlManager<br/>one background job at a time"]
+                CR["Crawler<br/>depth / page / time bounds"]
+                SAFE["url_validator · http_fetcher · robots<br/>SSRF-safe, robots.txt obeyed"]
+                CM --> CR --> SAFE
+            end
+        end
+
+        DB[("SQLite<br/>source of truth")]
+    end
+
+    WEB(["Public web pages"])
+
+    API_JS -- "HTTP / JSON  /api/*" --> ROUTERS
+    ROUTERS --> ENGINE
+    ROUTERS --> ADV
+    ROUTERS --> EVAL
+    ROUTERS --> ING
+    ROUTERS --> CM
+    ENGINE --> PRE
+    ENGINE --> INDEX
+    RETR --> INDEX
+    ADV --> RETR
+    EVAL --> ADV
+    ENGINE --> RETR
+    ING --> ENGINE
+    CR -- "extracted pages" --> ENGINE
+    ENGINE <-- "load / persist documents" --> DB
+    CM -- "job + URL status" --> DB
+    SAFE --> WEB
+    DB -. "index rebuilt at start-up" .-> INDEX
+```
+
+A request flows browser → `lib/api.js` → router → service → index/SQLite, and the response (scores plus intermediate
+calculations) flows back for the UI to render. Uploaded and crawled documents are written to SQLite first, then added to
+the in-memory index.
+
 ## Contents
 
-- [Prerequisites](#prerequisites) · [Quick start](#quick-start) · [Configuration](#configuration)
+- [Architecture](#architecture) · [Prerequisites](#prerequisites) · [Quick start](#quick-start) · [Configuration](#configuration)
 - [Tests](#tests) · [Project structure](#project-structure) · [API map](#api-endpoint-map)
 - [How it works](#how-it-works) (search, crawler, workbench, evaluation, analytics)
 - [Demo flow](#demo-flow) · [Known limitations](#known-limitations) · [Troubleshooting](#troubleshooting)
