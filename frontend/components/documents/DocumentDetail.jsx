@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Search, X } from "lucide-react";
 import Badge from "@/components/ui/Badge";
 import { ButtonLink } from "@/components/ui/Button";
@@ -25,13 +25,19 @@ function metadataItems(metadata) {
 /** Full document view (GET /api/documents/{id}). All content is rendered as text, never as HTML. */
 export default function DocumentDetail({ documentId, onClose }) {
   const { data: doc, loading, error, run } = useAsync(getDocument);
+  const rootRef = useRef(null);
+
+  // Below the xl breakpoint the panel sits under the table, so bring it into view when a document is chosen.
+  useEffect(() => {
+    if (window.matchMedia("(max-width: 1279px)").matches) rootRef.current?.scrollIntoView({ block: "start" });
+  }, []);
 
   useEffect(() => {
     run(documentId);
   }, [documentId, run]);
 
   return (
-    <Card aria-label="Document detail">
+    <Card ref={rootRef} aria-label="Document detail" className="scroll-mt-20">
       <CardHeader
         title="Document detail"
         actions={
@@ -65,7 +71,7 @@ function DocumentBody({ doc }) {
   return (
     <div className="space-y-4">
       <div>
-        <h3 className="text-lg font-semibold text-navy-800">{doc.title}</h3>
+        <h3 className="text-lg font-semibold text-navy-800 [overflow-wrap:anywhere]">{doc.title}</h3>
         <div className="mt-1 flex flex-wrap gap-1.5">
           <Badge tone={source.tone}>{source.label}</Badge>
           <Badge>{doc.category}</Badge>

@@ -2,6 +2,9 @@
   "name": "searchsphere-frontend",
   "version": "0.4.0",
   "private": true,
+  "engines": {
+    "node": ">=22.22.2"
+  },
   "description": "SearchSphere AI - Next.js frontend for the information retrieval laboratory",
   "scripts": {
     "dev": "next dev -p 3000",

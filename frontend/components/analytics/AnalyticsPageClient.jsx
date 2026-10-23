@@ -1,5 +1,6 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import { useEffect } from "react";
 import { BarChart3, RefreshCw } from "lucide-react";
 import Button from "@/components/ui/Button";
@@ -12,7 +13,11 @@ import { useAsync } from "@/hooks/useAsync";
 import { getAnalytics } from "@/lib/api";
 import { apByQuery, categoryCounts, crawlJobSeries, jobStatusCounts, sourceTypeCounts, sum, wordCountHistogram } from "@/lib/analytics";
 import { formatNumber, formatPercent, formatScore } from "@/lib/formatters";
-import { HorizontalBars, VerticalBars } from "./charts";
+
+// Recharts is ~100 kB gzipped and only this page needs it, so it is loaded on demand instead of with every route.
+const chartLoading = () => <Skeleton className="h-48" />;
+const HorizontalBars = dynamic(() => import("./charts").then((m) => m.HorizontalBars), { ssr: false, loading: chartLoading });
+const VerticalBars = dynamic(() => import("./charts").then((m) => m.VerticalBars), { ssr: false, loading: chartLoading });
 
 const MODE_LABELS = { tfidf: "TF-IDF", expanded: "TF-IDF + expansion", rocchio: "Rocchio (pseudo)" };
 

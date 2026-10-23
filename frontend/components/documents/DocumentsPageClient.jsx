@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { FileSearch } from "lucide-react";
+import Button from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { SelectField, TextField } from "@/components/ui/Field";
 import PageHeader from "@/components/ui/PageHeader";
@@ -116,6 +117,14 @@ export default function DocumentsPageClient() {
               </div>
             ) : !list.data ? (
               <TableSkeleton rows={8} cols={6} />
+            ) : list.data.items.length === 0 && list.data.total > 0 ? (
+              <div className="p-4">
+                <EmptyState icon={FileSearch} title={`Page ${page} does not exist`} description={`These ${formatNumber(list.data.total)} documents fit on ${list.data.total_pages} pages.`}>
+                  <Button variant="primary" onClick={() => update({ page: list.data.total_pages })}>
+                    Go to the last page
+                  </Button>
+                </EmptyState>
+              </div>
             ) : list.data.items.length === 0 ? (
               <div className="p-4">
                 <EmptyState icon={FileSearch} title="No documents found" description="No documents match these filters yet. Upload files or run the crawler to add some." />
@@ -130,7 +139,9 @@ export default function DocumentsPageClient() {
               </div>
             )}
             <div className="border-t border-mute-line p-3">
-              <Pagination page={page} totalPages={list.data?.total_pages || 0} onChange={(p) => update({ page: p })} disabled={list.loading} />
+              {list.data?.items.length > 0 && (
+                <Pagination page={page} totalPages={list.data.total_pages || 0} onChange={(p) => update({ page: p })} disabled={list.loading} />
+              )}
             </div>
           </Card>
         </div>

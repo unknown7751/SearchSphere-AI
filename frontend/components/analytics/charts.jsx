@@ -4,11 +4,14 @@ import { Bar, BarChart, CartesianGrid, LabelList, Legend, ResponsiveContainer, T
 
 // Categorical slots in fixed order (validated for colour-vision separation with the dataviz palette checker).
 export const SERIES_COLORS = ["#0f9d8e", "#3c78d8", "#eb6834"];
-const AXIS = "#6b7380";
+const AXIS = "#5b6370";
 const GRID = "#e6e4dd";
 const INK = "#232830";
 
 const tickStyle = { fontSize: 12, fill: AXIS };
+
+/** Long names (e.g. a 100-character category) are cut for the axis; the tooltip and table view show them in full. */
+const shortLabel = (value) => (typeof value === "string" && value.length > 22 ? `${value.slice(0, 21)}…` : value);
 
 function ChartTooltip({ active, payload, label, valueFormatter }) {
   if (!active || !payload?.length) return null;
@@ -37,7 +40,7 @@ export function HorizontalBars({ data, seriesName = "Value", color = SERIES_COLO
         <BarChart data={data} layout="vertical" margin={{ top: 4, right: 40, bottom: 4, left: 8 }} barCategoryGap={6}>
           <CartesianGrid horizontal={false} stroke={GRID} />
           <XAxis type="number" tick={tickStyle} axisLine={false} tickLine={false} allowDecimals={false} />
-          <YAxis type="category" dataKey="name" tick={{ ...tickStyle, fill: INK }} axisLine={false} tickLine={false} width={130} />
+          <YAxis type="category" dataKey="name" tick={{ ...tickStyle, fill: INK }} axisLine={false} tickLine={false} width={130} tickFormatter={shortLabel} />
           <Tooltip cursor={{ fill: "#f0eee8" }} content={<ChartTooltip valueFormatter={valueFormatter} />} />
           <Bar dataKey="value" name={seriesName} fill={color} radius={[0, 4, 4, 0]} maxBarSize={18} isAnimationActive={false}>
             <LabelList dataKey="value" position="right" formatter={valueFormatter} style={{ fontSize: 11, fill: INK }} />

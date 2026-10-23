@@ -18,7 +18,7 @@ export default function CrawlerPageClient() {
   const [initialised, setInitialised] = useState(false);
   const [hasActiveJob, setHasActiveJob] = useState(false);
 
-  const { job, error, polling, finished, refresh } = useCrawlJob(jobId);
+  const { job, error, polling, finished, refresh, retry } = useCrawlJob(jobId);
 
   const handleStarted = (created) => {
     setJobId(created.job_id);
@@ -29,6 +29,8 @@ export default function CrawlerPageClient() {
   // After a reload during a crawl, re-attach to the active job found in the history.
   const handleHistoryLoaded = useCallback(
     (res) => {
+      // Only the first history page is newest-first; a later page says nothing about whether a job is active.
+      if (res.page !== 1) return;
       const active = res.items.find((j) => j.status === "queued" || j.status === "running");
       setHasActiveJob(Boolean(active));
       if (!initialised) {
@@ -42,7 +44,9 @@ export default function CrawlerPageClient() {
   // The history re-reads once more when the watched job reaches a terminal state (the key changes then).
   const finishedKey = finished && job ? `${job.job_id}:${job.status}` : "";
 
-  const activeNow = job ? !finished : hasActiveJob && jobId == null;
+  // Start stays disabled from the moment a crawl is created (before its first status poll returns) until the history shows
+  // no queued/running job, even while an older, finished job is being viewed. The backend allows one active crawl.
+  const activeNow = hasActiveJob || (job ? !finished : false);
   const resultsKey = job ? `${job.status}:${job.pages_crawled}:${job.pages_failed}:${job.pages_blocked}:${job.pages_skipped}` : "none";
 
   return (
@@ -60,7 +64,7 @@ export default function CrawlerPageClient() {
 
       {jobId != null && (
         <div className="mt-6 space-y-6">
-          <JobStatus job={job} error={error} polling={polling} onRetry={refresh} onChanged={refresh} />
+          <JobStatus job={job} error={error} polling={polling} onRetry={retry} onChanged={refresh} />
           {finished && job.status === "completed" && job.pages_crawled > 0 && (
             <Notice tone="teal" className="flex flex-wrap items-center justify-between gap-2">
               <span>Crawl finished: {job.pages_crawled} page(s) fetched. Pages with status “indexed” or “updated” are searchable now.</span>

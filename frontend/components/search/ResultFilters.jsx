@@ -38,7 +38,7 @@ export default function ResultFilters({ results, sourceType, category, onChange 
           <select
             value={category || ""}
             onChange={(e) => onChange({ sourceType, category: e.target.value || null })}
-            className="h-8 rounded border border-mute-line bg-white px-2 text-sm"
+            className="h-8 rounded border border-mute-light bg-white px-2 text-sm"
           >
             <option value="">All categories</option>
             {categories.map((c) => (

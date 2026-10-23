@@ -1,6 +1,6 @@
 /**
  * Static documentation content for /docs. Every statement describes the implemented system
- * (backend Phases 1-3 + this frontend); see backend/README.md, PHASE2.md and PHASE3.md for details.
+ * (backend + this frontend); see the root README.md, backend/PHASE2.md and backend/PHASE3.md for details.
  */
 
 export const DOC_SECTIONS = [
@@ -44,6 +44,32 @@ export const DOC_SECTIONS = [
       "The browser talks only to the FastAPI service. The service owns all IR logic; the frontend collects input, calls the API and visualises the response. SQLite is the source of truth for documents; the in-memory inverted index is derived from it and rebuilt at start-up.",
     ],
     diagram: true,
+  },
+  {
+    id: "setup",
+    title: "Running the project",
+    paragraphs: [
+      "Backend (from backend/): create a virtual environment, pip install -r requirements.txt, run scripts/setup_nltk.py once, run python -m app.cli seed (creates the SQLite database with 114 sample documents and 10 judged queries), then python -m uvicorn app.main:app --reload on port 8000. Frontend (from frontend/): npm install, then npm run dev on port 3000. Open http://localhost:3000.",
+    ],
+    bullets: [
+      "Frontend configuration: NEXT_PUBLIC_API_URL (default http://localhost:8000), read at build time.",
+      "Backend configuration: optional SEARCHSPHERE_* environment variables (database path, CORS origins, upload and crawler limits). The backend reads real environment variables, not a .env file.",
+      "Use localhost, not 127.0.0.1, in the browser: the default CORS list allows http://localhost:3000.",
+      "To restore the pristine demo data, stop the backend, delete backend/data/searchsphere.db and run the seed command again.",
+    ],
+  },
+  {
+    id: "frontend",
+    title: "Frontend design",
+    paragraphs: [
+      "The URL is the source of truth for search (/search?q=…&mode=…&page=…), the document explorer and the workbench tab, so every view is shareable and survives reload and back/forward. A search request is aborted when a newer one starts, so a slow old response can never replace a newer one. The crawler page polls the job every 1.5 seconds until it finishes and re-attaches to an active job after a reload. lib/api.js is the only module that talks to the network.",
+    ],
+    bullets: [
+      "Search flow: search box → URL → POST /api/search (or /expanded, /rocchio, /boolean, /tolerant) → ranked results with the “Why this result?” score explanation.",
+      "Crawler flow: validate the URL → start (HTTP 202) → poll status → results table → history; cancel is available while the job is active.",
+      "Workbench: nine sections that display the intermediate values returned by the backend (nothing is recomputed in the browser); each section keeps its inputs and results while another is open.",
+      "Analytics: composed from /health, /documents, /crawler/history and /evaluation/map because the backend has no analytics endpoint; sections load independently and empty data is shown honestly.",
+    ],
   },
   {
     id: "preprocessing",
@@ -96,7 +122,7 @@ export const DOC_SECTIONS = [
     id: "expansion",
     title: "Query expansion",
     paragraphs: [
-      "Corpus-based expansion: rank with the original query, take the top documents, and add the terms whose weight is highest in the centroid of those documents' TF-IDF vectors (present in at least two of them). Added terms get a lower weight than typed ones. No external language model or thesaurus is used.",
+      "Corpus-based expansion: rank with the original query, take the top documents (5 by default), and score every other term by its weight in the centroid of those documents' length-normalised TF-IDF vectors, each document counting in proportion to how well it matched the query. A candidate must occur in at least two index documents and in at least two of the feedback documents; the best 5 are added, each with half the weight of a typed term (0.5 × idf). No external language model or thesaurus is used.",
     ],
   },
   {
@@ -134,9 +160,9 @@ export const DOC_SECTIONS = [
       "SSRF protection: only http(s); host names are resolved and every address must be public (loopback, private, link-local and cloud-metadata ranges are blocked).",
       "The connection is pinned to the validated IP, so DNS cannot change between check and connect (DNS rebinding).",
       "Each redirect target goes through the full validation again.",
-      "robots.txt is fetched and obeyed; if it cannot be read the site is treated as disallowed.",
+      "robots.txt is fetched and obeyed. If it is missing (404/410) there are no rules; if it cannot be read reliably (401/403, 5xx, timeout, connection error, oversized or non-text) the whole site is treated as disallowed.",
       "No credentials, cookies or proxies are used, and there is no option to turn the protections off.",
-      "Frontend: all backend text is rendered as text (no raw HTML) and external links are shown only for http(s) URLs.",
+      "Frontend: all backend text is rendered as text (no raw HTML), external links are shown only for http(s) URLs, there is no automatic retry of write requests, and basic security headers are set (no CSP).",
     ],
   },
   {
@@ -151,9 +177,10 @@ export const DOC_SECTIONS = [
     title: "API architecture",
     bullets: [
       "/api/search (+ /expanded, /rocchio, /boolean, /tolerant, /suggestions) - retrieval modes.",
-      "/api/documents (list, detail, create, upload) - corpus management.",
+      "/api/documents (list with category and source_type filters, detail, create, upload, delete) - corpus management.",
       "/api/workbench/* - preprocessing, inverted index, incidence matrix, TF-IDF, cosine, expansion, Rocchio, evaluation walk-throughs.",
       "/api/evaluation/* - run, MAP and the stored dataset.",
+      "/api/health and /api/index/* - status and index maintenance (rebuild, consistency check).",
       "/api/crawler/* - validate-url, start, status, results, cancel, history.",
       "Errors share one envelope: { error: { code, message, details } } and never include stack traces.",
     ],
@@ -162,18 +189,21 @@ export const DOC_SECTIONS = [
     id: "testing",
     title: "Testing",
     paragraphs: [
-      "The backend has an automated pytest suite (620 tests at the end of Phase 3) covering preprocessing, the index, retrieval, metrics, ingestion, the crawler's security rules (with fake network and DNS) and the HTTP API. The frontend has unit tests for the API client, formatters and search model, and component tests for the main forms.",
+      "The backend has an automated pytest suite (620 tests at the end of Phase 3) covering preprocessing, the index, retrieval, metrics, ingestion, the crawler's security rules (with fake network and DNS) and the HTTP API. The frontend has Vitest tests for the API client (error mapping, no retries, base URL), formatters, search model and hooks (stale-response ordering, crawler polling and cleanup), plus component tests for the search, document, ingest, crawler and workbench behaviours. The end-to-end browser flows were checked by hand-driven Playwright scripts that are not part of the repository.",
     ],
   },
   {
     id: "limitations",
     title: "Limitations",
     bullets: [
-      "No phrase or proximity queries (positions are not stored).",
+      "No phrase or proximity queries: the inverted index stores term frequencies only, not token positions.",
+      "The search endpoints have no source-type filter (only the document list does), so the filters on the search page apply to the retrieved page only.",
+      "Boolean mode is not part of the evaluation comparison: the stored judged queries are free text, not Boolean expressions.",
       "English only; no OCR for scanned PDFs; the crawler does not execute JavaScript.",
-      "The index is in memory and rebuilt on start-up; crawl jobs do not survive a restart.",
+      "The index is in memory and rebuilt on start-up; crawl jobs do not survive a restart (unfinished jobs are marked failed).",
       "Evaluation judgments come from a small, locally written dataset, so absolute scores are illustrative.",
       "Search history is not recorded, so there are no query-volume analytics.",
+      "The category list and the analytics charts use the first 500 documents; there is no authentication, so the app is for a trusted local network only.",
     ],
   },
   {

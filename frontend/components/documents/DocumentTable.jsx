@@ -22,18 +22,20 @@ export default function DocumentTable({ documents, selectedId, onSelect }) {
           return (
             <tr key={doc.id} className={selected ? "bg-teal-50" : "hover:bg-paper"}>
               <Td align="right" mono>{doc.id}</Td>
-              <Td className="max-w-xs">
-                <button
-                  type="button"
-                  onClick={() => onSelect(doc.id)}
-                  aria-current={selected ? "true" : undefined}
-                  className="text-left font-medium text-navy-700 hover:text-teal-700 hover:underline"
-                >
-                  {doc.title}
-                </button>
+              <Td>
+                <div className="max-w-xs [overflow-wrap:anywhere]">
+                  <button
+                    type="button"
+                    onClick={() => onSelect(doc.id)}
+                    aria-current={selected ? "true" : undefined}
+                    className="text-left font-medium text-navy-700 hover:text-teal-700 hover:underline"
+                  >
+                    {doc.title}
+                  </button>
+                </div>
               </Td>
               <Td><Badge tone={source.tone}>{source.label}</Badge></Td>
-              <Td className="whitespace-nowrap text-ink-soft">{doc.category}</Td>
+              <Td className="text-ink-soft"><div className="max-w-[12rem] [overflow-wrap:anywhere]">{doc.category}</div></Td>
               <Td className="whitespace-nowrap text-ink-soft">{formatDate(doc.ingested_at)}</Td>
               <Td align="right" mono>{formatNumber(doc.word_count)}</Td>
             </tr>

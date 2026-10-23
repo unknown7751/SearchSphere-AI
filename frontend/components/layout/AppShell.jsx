@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Menu, Search, X } from "lucide-react";
 import { APP_NAME, NAV_ITEMS } from "@/lib/constants";
 import BackendStatus from "./BackendStatus";
@@ -16,6 +16,7 @@ export default function AppShell({ children }) {
   // The menu is open only for the page it was opened on, so navigating closes it without an effect.
   const [openAt, setOpenAt] = useState(null);
   const open = openAt === pathname;
+  const toggleRef = useRef(null);
   const setOpen = (updater) => setOpenAt((prev) => ((typeof updater === "function" ? updater(prev === pathname) : updater) ? pathname : null));
 
   return (
@@ -23,7 +24,15 @@ export default function AppShell({ children }) {
       <a href="#main" className="skip-link">
         Skip to content
       </a>
-      <header className="sticky top-0 z-40 border-b border-navy-900 bg-navy-800 text-white">
+      <header
+        className="sticky top-0 z-40 border-b border-navy-900 bg-navy-800 text-white"
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && open) {
+            setOpenAt(null);
+            toggleRef.current?.focus();
+          }
+        }}
+      >
         <div className="mx-auto flex h-14 max-w-7xl items-center gap-4 px-4">
           <Link href="/" className="flex shrink-0 items-center gap-2 font-semibold tracking-tight">
             <span className="flex h-7 w-7 items-center justify-center rounded bg-teal-600" aria-hidden="true">
@@ -53,6 +62,7 @@ export default function AppShell({ children }) {
           <div className="ml-auto flex items-center gap-3">
             <BackendStatus />
             <button
+              ref={toggleRef}
               type="button"
               className="rounded p-2 text-navy-100 hover:bg-navy-700 lg:hidden"
               aria-expanded={open}
@@ -87,7 +97,7 @@ export default function AppShell({ children }) {
         )}
       </header>
 
-      <main id="main" className="mx-auto w-full max-w-7xl flex-1 px-4 py-6">
+      <main id="main" tabIndex={-1} className="mx-auto w-full max-w-7xl flex-1 px-4 py-6 focus:outline-none">
         {children}
       </main>
 

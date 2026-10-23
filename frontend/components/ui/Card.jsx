@@ -21,6 +21,10 @@ export function CardHeader({ title, description, actions, icon: Icon, className 
   );
 }
 
-export function CardBody({ className = "", children }) {
-  return <div className={`p-4 ${className}`}>{children}</div>;
+export function CardBody({ className = "", children, ...props }) {
+  return (
+    <div className={`p-4 ${className}`} {...props}>
+      {children}
+    </div>
+  );
 }

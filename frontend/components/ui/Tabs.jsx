@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 
 /** Accessible tab list (roving focus with arrow keys / Home / End). Panels are rendered by the caller. */
 export default function Tabs({ tabs, value, onChange, label, idPrefix = "tab" }) {
@@ -50,13 +50,20 @@ export default function Tabs({ tabs, value, onChange, label, idPrefix = "tab" })
   );
 }
 
+/**
+ * A panel is mounted the first time its tab is opened and then only hidden, so what the user typed and
+ * computed in a tab survives switching to another tab and back (and unvisited tabs cost no requests).
+ */
 export function TabPanel({ id, active, idPrefix = "tab", children }) {
-  if (!active) return null;
+  const [visited, setVisited] = useState(active);
+  if (active && !visited) setVisited(true);
+  if (!visited) return null;
   return (
     <div
       role="tabpanel"
       id={`${idPrefix}-panel-${id}`}
       aria-labelledby={`${idPrefix}-${id}`}
+      hidden={!active}
       tabIndex={0}
       className="pt-4 focus-visible:outline-none"
     >

@@ -10,7 +10,7 @@ const TONES = {
 export default function Badge({ tone = "neutral", className = "", children, ...props }) {
   return (
     <span
-      className={`inline-flex items-center whitespace-nowrap rounded border px-1.5 py-0.5 text-xs font-medium ${TONES[tone]} ${className}`}
+      className={`inline-flex max-w-full items-center rounded border [overflow-wrap:anywhere] px-1.5 py-0.5 text-xs font-medium ${TONES[tone]} ${className}`}
       {...props}
     >
       {children}

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { SearchX } from "lucide-react";
 import Badge from "@/components/ui/Badge";
+import Button from "@/components/ui/Button";
 import Pagination from "@/components/ui/Pagination";
 import { EmptyState, ErrorState, Notice, ResultsSkeleton } from "@/components/ui/States";
 import { SEARCH_MODES } from "@/lib/constants";
@@ -15,7 +16,8 @@ import { BooleanInsight, ExpansionInsight, QueryAnalysis, RocchioInsight, Wildca
 /** Presents every state of a search: initial, loading, error, empty and results. */
 export default function SearchResults({ query, mode, state, onPageChange, onRetry }) {
   const [filters, setFilters] = useState({ sourceType: null, category: null });
-  const view = state.data;
+  // While a different query/mode is loading, the previous view must not be shown under the new query.
+  const view = state.data?.request?.query === query && state.data.request.mode === mode ? state.data : null;
   const modeLabel = SEARCH_MODES.find((m) => m.value === mode)?.label || mode;
 
   const visible = useMemo(() => (view ? filterResults(view.results, filters) : []), [view, filters]);
@@ -33,6 +35,7 @@ export default function SearchResults({ query, mode, state, onPageChange, onRetr
 
   const totalPages = Math.max(1, Math.ceil(view.total / view.pageSize));
   const loading = state.loading;
+  const beyondLastPage = view.total > 0 && view.results.length === 0 && view.page > totalPages;
 
   return (
     <div className={`space-y-4 ${loading ? "opacity-60" : ""}`} aria-busy={loading}>
@@ -68,7 +71,13 @@ export default function SearchResults({ query, mode, state, onPageChange, onRetr
               The backend lists at most {view.total} documents for a pattern; {view.extras.wildcard.totalDocuments} documents match in total.
             </Notice>
           )}
-          {visible.length === 0 ? (
+          {beyondLastPage ? (
+            <EmptyState title={`Page ${view.page} does not exist`} description={`These ${view.total} results fit on ${totalPages} page${totalPages === 1 ? "" : "s"}.`}>
+              <Button variant="primary" onClick={() => onPageChange(totalPages)}>
+                Go to the last page
+              </Button>
+            </EmptyState>
+          ) : visible.length === 0 ? (
             <EmptyState title="No results on this page match the filters" description="Clear the filters to see all retrieved results." />
           ) : (
             <ol className="space-y-3" aria-label="Search results">
@@ -79,7 +88,7 @@ export default function SearchResults({ query, mode, state, onPageChange, onRetr
               ))}
             </ol>
           )}
-          <Pagination page={view.page} totalPages={totalPages} onChange={onPageChange} disabled={loading} />
+          {!beyondLastPage && <Pagination page={view.page} totalPages={totalPages} onChange={onPageChange} disabled={loading} />}
         </>
       )}
     </div>

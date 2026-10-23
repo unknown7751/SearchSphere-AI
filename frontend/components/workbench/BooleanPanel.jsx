@@ -150,7 +150,7 @@ export default function BooleanPanel() {
                       <Td mono>{row.term}</Td>
                       <Td align="right" mono>{row.document_frequency}</Td>
                       {row.row.map((cell, i) => (
-                        <Td key={i} align="right" mono className={cell ? "bg-teal-50 font-semibold text-teal-800" : "text-mute-light"}>
+                        <Td key={i} align="right" mono className={cell ? "bg-teal-50 font-semibold text-teal-800" : "text-mute"}>
                           {cell}
                         </Td>
                       ))}

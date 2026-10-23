@@ -271,7 +271,7 @@ export default function RocchioPanel() {
                   <ol className="space-y-3">
                     {search.data.results.map((r) => (
                       <li key={r.doc_id}>
-                        <ResultCard result={r} />
+                        <ResultCard result={r} as="h3" />
                       </li>
                     ))}
                   </ol>

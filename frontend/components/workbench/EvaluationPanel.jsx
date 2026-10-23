@@ -52,6 +52,12 @@ function SingleQuery({ dataset }) {
   const judgments = queries.find((q) => q.query === selected);
   const canRun = query && kOk && (!isCustom || relevantIds.length > 0 || queries.some((q) => q.query === query));
 
+  // Boolean is only offered for custom queries (the stored queries are free text), so leaving custom resets it.
+  const chooseQuery = (value) => {
+    setSelected(value);
+    if (value !== CUSTOM && mode === "boolean") setMode("tfidf");
+  };
+
   const request = () => ({ query, mode, topK, relevantDocIds: isCustom ? relevantIds : undefined });
   const submit = (e) => {
     e.preventDefault();
@@ -66,7 +72,7 @@ function SingleQuery({ dataset }) {
         <CardBody>
           <form onSubmit={submit} className="space-y-3">
             <div className="grid gap-3 md:grid-cols-3">
-              <SelectField label="Query" value={selected} onChange={(e) => setSelected(e.target.value)} className="md:col-span-1">
+              <SelectField label="Query" value={selected} onChange={(e) => chooseQuery(e.target.value)} className="md:col-span-1">
                 {queries.map((q) => (
                   <option key={q.id} value={q.query}>
                     {q.query}

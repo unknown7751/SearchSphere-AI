@@ -1,6 +1,6 @@
 import { describe, expect, it, vi, afterEach } from "vitest";
 import { apByQuery, categoryCounts, crawlJobSeries, wordCountHistogram } from "@/lib/analytics";
-import { ApiError, describeError, getDocuments, runMapEvaluation, searchDocuments, uploadDocument } from "@/lib/api";
+import { ApiError, cancelCrawler, describeError, getCrawlerStatus, getDocuments, runMapEvaluation, searchDocuments, startCrawler, uploadDocument } from "@/lib/api";
 import { formatBytes, formatDate, formatScore, parseIdList, safeHttpUrl, sourceTypeMeta } from "@/lib/formatters";
 import { filterResults, normalizeSearchResponse } from "@/lib/searchModel";
 import { searchHref } from "@/lib/searchUrl";
@@ -108,6 +108,50 @@ describe("api client", () => {
     vi.stubGlobal("fetch", vi.fn((_, init) => new Promise((_, reject) => init.signal.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" }))))));
     const error = await runMapEvaluation({}, { timeoutMs: 20 }).catch((e) => e);
     expect(error.kind).toBe("timeout");
+  });
+
+  it("never retries a failed write, so a crawl or cancel cannot be issued twice", async () => {
+    const failing = vi.fn().mockRejectedValue(new TypeError("Failed to fetch"));
+    vi.stubGlobal("fetch", failing);
+    await startCrawler({ url: "https://example.com/", maxPages: 5, maxDepth: 1 }).catch(() => {});
+    await cancelCrawler(3).catch(() => {});
+    expect(failing).toHaveBeenCalledTimes(2);
+    mockFetch(500, { error: { message: "boom" } });
+    const server = vi.mocked(fetch);
+    await startCrawler({ url: "https://example.com/", maxPages: 5, maxDepth: 1 }).catch(() => {});
+    expect(server).toHaveBeenCalledTimes(1);
+  });
+
+  it("maps each documented status to a useful title", () => {
+    const titles = Object.fromEntries(
+      [400, 404, 409, 413, 415, 422, 500, 503].map((status) => [status, describeError(new ApiError({ kind: "http", status, message: "m" })).title]),
+    );
+    expect(titles).toEqual({ 400: "Invalid request", 404: "Not found", 409: "Conflict", 413: "File too large", 415: "Unsupported file", 422: "Invalid input", 500: "Server error", 503: "Server error" });
+    expect(describeError(new Error("secret stack")).message).not.toMatch(/secret/);
+  });
+
+  it("falls back to a status message when the error body is not the backend envelope", async () => {
+    mockFetch(404, "<html>Not Found</html>");
+    await expect(getCrawlerStatus(99)).rejects.toMatchObject({ status: 404, message: "The requested item could not be found." });
+    mockFetch(502, null, { json: false });
+    await expect(getCrawlerStatus(99)).rejects.toMatchObject({ status: 502, message: "The backend is not reachable." });
+  });
+
+  it("rejects an empty or non-object success body as malformed", async () => {
+    mockFetch(200, null);
+    await expect(getCrawlerStatus(1)).rejects.toMatchObject({ kind: "malformed" });
+    mockFetch(200, "text");
+    await expect(getCrawlerStatus(1)).rejects.toMatchObject({ kind: "malformed" });
+  });
+
+  it("reads the API base URL from NEXT_PUBLIC_API_URL without a trailing slash, with a local default", async () => {
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "https://api.example.org///");
+    vi.resetModules();
+    expect((await import("@/lib/api")).API_BASE).toBe("https://api.example.org");
+    vi.stubEnv("NEXT_PUBLIC_API_URL", "");
+    vi.resetModules();
+    expect((await import("@/lib/api")).API_BASE).toBe("http://localhost:8000");
+    vi.unstubAllEnvs();
   });
 
   it("uploads files as multipart with progress", async () => {

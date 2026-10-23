@@ -71,7 +71,9 @@ export default function IngestPanel() {
   const [result, setResult] = useState(null);
   const [uploads, setUploads] = useState([]);
 
-  const busy = phase === "uploading" || phase === "processing";
+  // After a failure `phase` still names the step that failed (so the step list can mark it), but the form is usable again.
+  const busy = !error && (phase === "uploading" || phase === "processing");
+  const existingId = error?.code === "duplicate_document" ? Number(error.details?.existing_document_id) || null : null;
 
   const onFileChange = (event) => {
     const chosen = event.target.files?.[0] || null;
@@ -167,13 +169,20 @@ export default function IngestPanel() {
           </form>
 
           {error && <ErrorState className="mt-4" error={error} />}
+          {existingId && (
+            <div className="mt-2">
+              <ButtonLink href={`/documents?id=${existingId}`} size="sm">
+                View existing document #{existingId}
+              </ButtonLink>
+            </div>
+          )}
         </CardBody>
       </Card>
 
       <div className="space-y-4">
         <Card>
           <CardHeader title="Status" />
-          <CardBody className="space-y-4">
+          <CardBody className="space-y-4" aria-live="polite">
             {phase === "idle" ? (
               <p className="text-sm text-mute">Select a file to begin.</p>
             ) : (
@@ -192,9 +201,13 @@ export default function IngestPanel() {
                       <div className="h-full bg-teal-600 transition-all" style={{ width: `${Math.round(progress * 100)}%` }} />
                     </div>
                     <p className="mt-1 text-xs text-mute">
-                      {phase === "processing"
-                        ? "Uploaded. The server is extracting text and updating the index in this request."
-                        : `${Math.round(progress * 100)}% uploaded`}
+                      {failed
+                        ? "The upload did not complete. Nothing was added to the library."
+                        : phase === "processing"
+                          ? "Uploaded. The server is extracting text and updating the index in this request."
+                          : phase === "done"
+                            ? "Uploaded and indexed."
+                            : `${Math.round(progress * 100)}% uploaded`}
                     </p>
                   </div>
                 )}
